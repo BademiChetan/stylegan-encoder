@@ -32,7 +32,10 @@ class PerceptualModel:
 
     def build_perceptual_model(self, generated_image_tensor):
         vgg16 = VGG16(include_top=False, input_shape=(self.img_size, self.img_size, 3))
-        self.perceptual_model = Model(vgg16.input, vgg16.layers[self.layer].output)
+        #Image2StyleGAN uses 1,2,8,12 layers from VGG
+        vgg_layers = {'conv1_1': 1, 'conv1_2': 2, 'conv3_2': 8, 'conv4_2': 12}
+        for i in range(
+        self.perceptual_model = Model(vgg16.input, [vgg16.layers[1].output, vgg16.layers[2].output,vgg16.layers[8].output,vgg16.layers[12].output])
         generated_image = preprocess_input(tf.image.resize_images(generated_image_tensor,
                                                                   (self.img_size, self.img_size), method=1))
         generated_img_features = self.perceptual_model(generated_image)
