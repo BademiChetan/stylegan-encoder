@@ -24,7 +24,7 @@ class PerceptualModel:
         self.img_size = img_size
         self.layer = layer
         self.batch_size = batch_size
-
+        self.perceptual_loss_layers = {'conv1_1': 1, 'conv1_2': 2, 'conv3_2': 8, 'conv4_2': 12}
         self.perceptual_model = None
         self.ref_img_features = None
         self.loss = None
@@ -32,25 +32,31 @@ class PerceptualModel:
     def build_perceptual_model(self, generated_image_tensor):
         vgg16 = VGG16(include_top=False, input_shape=(self.img_size, self.img_size, 3))
         #Image2StyleGAN uses 1,2,8,12 layers from VGG
-        vgg_layers = {'conv1_1': 1, 'conv1_2': 2, 'conv3_2': 8, 'conv4_2': 12}
-        self.perceptual_model = Model(vgg16.input, [vgg16.layers[i].output for i in (1,2,8,12)])
+        self.perceptual_models = [Model(vgg16.input, vgg16.layers[v].output) for v in self.perceptual_loss_layers.values()]
         generated_image = preprocess_input(tf.image.resize_images(generated_image_tensor,
                                                                   (self.img_size, self.img_size), method=1))
-        generated_img_features = self.perceptual_model(generated_image)
+        generated_img_features = [model(generated_image) for model in self.perceptual_models]
+        self.ref_img_features = [
+            tf.get_variable('ref_img_features_%d' % index, 
+                            shape=generated_image_feature.shape, 
+                            dtype='float32', 
+                            initializer=tf.initializers.zeros()
+                           ) for index, generated_image_feature in enumerate(generated_img_features)]
+        
+        self.loss = np.sum(np.array([
+                    tf.losses.mean_squared_error(
+                        self.ref_img_features[i], 
+                        generated_img_features[i]) 
+            for i in range(len(generated_img_features))
+        ]))
 
-        self.ref_img_features = tf.get_variable('ref_img_features', shape=generated_img_features.shape,
-                                                dtype='float32', initializer=tf.initializers.zeros())
-        self.sess.run([self.features_weight.initializer])
-
-        self.loss = tf.losses.mean_squared_error(self.ref_img_features,
-                                                 generated_img_features)
 
     def set_reference_images(self, images_list):
         assert(len(images_list) != 0 and len(images_list) <= self.batch_size)
         loaded_image = load_images(images_list, self.img_size)
-        image_features = self.perceptual_model.predict_on_batch(loaded_image)
-
-        self.sess.run(tf.assign(self.ref_img_features, image_features))
+        image_features = [model.predict_on_batch(loaded_image) for model in self.perceptual_models]
+        for index, image_feature in enumerate(image_features):
+            self.sess.run(tf.assign(self.ref_img_features[index], image_feature))
 
     def optimize(self, vars_to_optimize, iterations=500, learning_rate=1.):
         vars_to_optimize = vars_to_optimize if isinstance(vars_to_optimize, list) else [vars_to_optimize]
