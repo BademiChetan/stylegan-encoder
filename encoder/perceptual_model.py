@@ -25,6 +25,7 @@ class PerceptualModel:
         self.layer = layer
         self.batch_size = batch_size
         self.perceptual_loss_layers = {'conv1_1': 1, 'conv1_2': 2, 'conv3_2': 8, 'conv4_2': 12}
+        #self.perceptual_loss_layers = {'conv4_2': 9}
         self.perceptual_model = None
         self.ref_img_features = None
         self.loss = None
@@ -43,12 +44,11 @@ class PerceptualModel:
                             initializer=tf.initializers.zeros()
                            ) for index, generated_image_feature in enumerate(generated_img_features)]
         
-        self.loss = np.sum(np.array([
+        self.loss = tf.reduce_sum([
                     tf.losses.mean_squared_error(
                         self.ref_img_features[i], 
                         generated_img_features[i]) 
-            for i in range(len(generated_img_features))
-        ]))
+            for i in range(len(generated_img_features))])
 
 
     def set_reference_images(self, images_list):
@@ -64,5 +64,6 @@ class PerceptualModel:
         min_op = optimizer.minimize(self.loss, var_list=[vars_to_optimize])
         for _ in range(iterations):
             _, loss = self.sess.run([min_op, self.loss])
+            print(loss)
             yield loss
 
