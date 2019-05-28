@@ -37,6 +37,10 @@ class PerceptualModel:
         generated_image = preprocess_input(tf.image.resize_images(generated_image_tensor,
                                                                   (self.img_size, self.img_size), method=1))
         generated_img_features = [model(generated_image) for model in self.perceptual_models]
+        self.input_image = tf.get_variable('input_image', 
+                            shape=generated_image.shape, 
+                            dtype='float32', 
+                            initializer=tf.initializers.zeros())
         self.ref_img_features = [
             tf.get_variable('ref_img_features_%d' % index, 
                             shape=generated_image_feature.shape, 
@@ -45,10 +49,13 @@ class PerceptualModel:
                            ) for index, generated_image_feature in enumerate(generated_img_features)]
         
         self.loss = tf.reduce_sum([
-                    tf.losses.mean_squared_error(
+                    tf.math.sqrt(
+                        tf.losses.mean_squared_error(
                         self.ref_img_features[i], 
-                        generated_img_features[i]) 
+                        generated_img_features[i])
+                    )
             for i in range(len(generated_img_features))])
+        self.loss += tf.sqrt(tf.losses.mean_squared_error(generated_image, self.input_image))
 
 
     def set_reference_images(self, images_list):
@@ -57,11 +64,13 @@ class PerceptualModel:
         image_features = [model.predict_on_batch(loaded_image) for model in self.perceptual_models]
         for index, image_feature in enumerate(image_features):
             self.sess.run(tf.assign(self.ref_img_features[index], image_feature))
+        self.sess.run(tf.assign(self.input_image, loaded_image))
 
     def optimize(self, vars_to_optimize, iterations=500, learning_rate=1.):
         vars_to_optimize = vars_to_optimize if isinstance(vars_to_optimize, list) else [vars_to_optimize]
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
         min_op = optimizer.minimize(self.loss, var_list=[vars_to_optimize])
+        self.sess.run(tf.variables_initializer(optimizer.variables()))
         for _ in range(iterations):
             _, loss = self.sess.run([min_op, self.loss])
             print(loss)
