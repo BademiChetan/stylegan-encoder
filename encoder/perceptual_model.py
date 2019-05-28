@@ -48,14 +48,21 @@ class PerceptualModel:
                             initializer=tf.initializers.zeros()
                            ) for index, generated_image_feature in enumerate(generated_img_features)]
         
-        self.loss = tf.reduce_sum([
-                    tf.math.sqrt(
-                        tf.losses.mean_squared_error(
-                        self.ref_img_features[i], 
-                        generated_img_features[i])
-                    )
-            for i in range(len(generated_img_features))])
-        self.loss += tf.sqrt(tf.losses.mean_squared_error(generated_image, self.input_image))
+        # Perceptual loss from Image2StyleGAN
+        #self.loss = tf.reduce_sum([
+        #            tf.math.sqrt(
+        #                tf.losses.mean_squared_error(
+        #                self.ref_img_features[i], 
+        #                generated_img_features[i])
+        #            )
+        #    for i in range(len(generated_img_features))])
+        ## L2 loss between generated image and input image
+        #self.loss += tf.sqrt(tf.losses.mean_squared_error(generated_image, self.input_image))
+        # Use SSIM as the loss function
+        self.loss =  - tf.image.ssim(generated_image, self.input_image, 256)
+        # Use MS-SSIM as the loss function
+        # self.loss = tf.image.ssim_multiscale(generated_image, self.input_image, 256)
+
 
 
     def set_reference_images(self, images_list):
