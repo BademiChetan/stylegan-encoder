@@ -31,6 +31,7 @@ def main():
     parser.add_argument('--image_size', default=256, help='Size of images for perceptual model', type=int)
     parser.add_argument('--lr', default=1., help='Learning rate for perceptual model', type=float)
     parser.add_argument('--iterations', default=1000, help='Number of optimization steps for each batch', type=int)
+    parser.add_argument('--use_discriminator', default=False, help='Whether to use the discriminator of StyleGAN for perceptual loss.', type=int)
 
     # Generator params
     parser.add_argument('--randomize_noise', default=False, help='Add noise to dlatents during optimization', type=bool)
@@ -51,8 +52,11 @@ def main():
         generator_network, discriminator_network, Gs_network = pickle.load(f)
 
     generator = Generator(Gs_network, args.batch_size, randomize_noise=args.randomize_noise)
-    perceptual_model = PerceptualModel(args.image_size, layer=9, batch_size=args.batch_size)
-    perceptual_model.build_perceptual_model(generator.generated_image)
+    perceptual_model = PerceptualModel(args.image_size, layer=9, batch_size=args.batch_size, use_discriminator=args.user_discriminator)
+    if self.use_discriminator:
+        perceptual_model.build_perceptual_model_using_discriminator(generator.generated_image)
+    else:
+        perceptual_model.build_perceptual_model_vgg(generator.generated_image)
 
     # Optimize (only) dlatents by minimizing perceptual loss between reference and generated images in feature space
     for images_batch in tqdm(split_to_batches(ref_images, args.batch_size), total=len(ref_images)//args.batch_size):

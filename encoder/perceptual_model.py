@@ -29,8 +29,28 @@ class PerceptualModel:
         self.perceptual_model = None
         self.ref_img_features = None
         self.loss = None
+        self.discriminator_conv_layer_variable_names = [
+                'D/1024x1024/Conv0/LeakyReLU/IdentityN',
+                'D/1024x1024/Conv1_down/LeakyReLU/IdentityN',
+                'D/512x512/Conv0/LeakyReLU/IdentityN',
+                'D/512x512/Conv1_down/LeakyReLU/IdentityN',
+                'D/256x256/Conv0/LeakyReLU/IdentityN',
+                'D/256x256/Conv1_down/LeakyReLU/IdentityN',
+                'D/128x128/Conv0/LeakyReLU/IdentityN',
+                'D/128x128/Conv1_down/LeakyReLU/IdentityN',
+                'D/64x64/Conv0/LeakyReLU/IdentityN',
+                'D/64x64/Conv1_down/LeakyReLU/IdentityN',
+                'D/32x32/Conv0/LeakyReLU/IdentityN',
+                'D/32x32/Conv1_down/LeakyReLU/IdentityN',
+                'D/16x16/Conv0/LeakyReLU/IdentityN',
+                'D/16x16/Conv1_down/LeakyReLU/IdentityN',
+                'D/8x8/Conv0/LeakyReLU/IdentityN',
+                'D/8x8/Conv1_down/LeakyReLU/IdentityN',
+                'D/4x4/Conv/LeakyReLU/IdentityN'
+        ] 
+    
 
-    def build_perceptual_model(self, generated_image_tensor):
+    def build_perceptual_model_vgg(self, generated_image_tensor):
         vgg16 = VGG16(include_top=False, input_shape=(self.img_size, self.img_size, 3))
         #Image2StyleGAN uses 1,2,8,12 layers from VGG
         self.perceptual_models = [Model(vgg16.input, vgg16.layers[v].output) for v in self.perceptual_loss_layers.values()]
@@ -65,8 +85,43 @@ class PerceptualModel:
 
 
 
-    def set_reference_images(self, images_list):
+    def build_perceptual_model_discriminator(self, generated_image_tensor, num_layers_to_use=4):
+        self.loss = 0
+        self.ref_img_features = []
+        for index, conv_variable_name in enumerate(self.discriminator_conv_layer_variable_names[0:num_layers_to_use]):
+            # TODO: Check the correct method for getting variable.
+            conv_variable = tf.get_default_graph().get_variable_by_name(conv_variable_name)
+            variable_shape = conv_variable.shape, 
+            self.ref_img_features.append(
+                    tf.get_variable('ref_img_features_%d' % index, 
+                            shape=variable_shape, 
+                            dtype='float32', 
+                            initializer=tf.initializers.zeros()))
+            self.loss += tf.sqrt(
+                    tf.losses.mean_squared_error(
+                        conv_variable,
+                        self.ref_image_features[index]
+                    ) / (variable_shape[0] * variable_shape[1])
+            )
+
+
+    def set_reference_images_vgg(self, images_list):
         assert(len(images_list) != 0 and len(images_list) <= self.batch_size)
+        loaded_image = load_images(images_list, self.img_size)
+        image_features = [model.predict_on_batch(loaded_image) for model in self.perceptual_models]
+        for index, image_feature in enumerate(image_features):
+            self.sess.run(tf.assign(self.ref_img_features[index], image_feature))
+        self.sess.run(tf.assign(self.input_image, loaded_image))
+    
+    def set_discriminator_input_image():
+
+
+    def set_reference_images_discriminator(self, images_list):
+        assert(len(images_list) != 0 and len(images_list) <= self.batch_size)
+        assert(self.batch_size == 1)
+        input_expr = [tf.get_default_graph().get_tensor_by_name(name) for name in ['D/images_in:0']]
+        tf.get_default_session().run(expressions, dict(zip(in_expr, mb_in)))
+
         loaded_image = load_images(images_list, self.img_size)
         image_features = [model.predict_on_batch(loaded_image) for model in self.perceptual_models]
         for index, image_feature in enumerate(image_features):
