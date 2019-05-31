@@ -9,16 +9,15 @@ import keras.backend as K
 def load_images(images_list, img_size):
     loaded_images = list()
     for img_path in images_list:
-        img = image.load_img(img_path, target_size=(img_size, img_size))
+        img = np.array(image.load_img(img_path, target_size=(img_size, img_size)))
+        img = img.transpose(2,0,1)
         img = np.expand_dims(img, 0)
         loaded_images.append(img)
-    loaded_images = np.vstack(loaded_images)
-    preprocessed_images = preprocess_input(loaded_images)
-    return preprocessed_images
+    return np.vstack(loaded_images)
 
 
 class PerceptualModel:
-    def __init__(self, img_size, layer=9, batch_size=1, sess=None):
+    def __init__(self, img_size, layer=9, batch_size=1, sess=None, use_discriminator=False, num_layers_to_use=4):
         self.sess = tf.get_default_session() if sess is None else sess
         K.set_session(self.sess)
         self.img_size = img_size
@@ -29,6 +28,8 @@ class PerceptualModel:
         self.perceptual_model = None
         self.ref_img_features = None
         self.loss = None
+        self.use_discriminator = use_discriminator
+        self.num_layers_to_use= num_layers_to_use
         self.discriminator_conv_layer_variable_names = [
                 'D/1024x1024/Conv0/LeakyReLU/IdentityN',
                 'D/1024x1024/Conv1_down/LeakyReLU/IdentityN',
@@ -85,48 +86,48 @@ class PerceptualModel:
 
 
 
-    def build_perceptual_model_discriminator(self, generated_image_tensor, num_layers_to_use=4):
+    def build_perceptual_model_using_discriminator(self, generated_image_tensor):
         self.loss = 0
         self.ref_img_features = []
-        for index, conv_variable_name in enumerate(self.discriminator_conv_layer_variable_names[0:num_layers_to_use]):
+        for index, conv_variable_name in enumerate(self.discriminator_conv_layer_variable_names[0:self.num_layers_to_use]):
             # TODO: Check the correct method for getting variable.
-            conv_variable = tf.get_default_graph().get_variable_by_name(conv_variable_name)
-            variable_shape = conv_variable.shape, 
+            conv_variable = tf.get_default_graph().get_tensor_by_name(conv_variable_name + ":0")
+            variable_shape = conv_variable.shape
+            print("variable shape = ")
+            print(variable_shape)
             self.ref_img_features.append(
-                    tf.get_variable('ref_img_features_%d' % index, 
-                            shape=variable_shape, 
-                            dtype='float32', 
+                    tf.get_variable('ref_img_features_%d' % index,
+                            shape=(self.batch_size, variable_shape[1], variable_shape[2], variable_shape[3]), 
+                            dtype='float32',
                             initializer=tf.initializers.zeros()))
-            self.loss += tf.sqrt(
-                    tf.losses.mean_squared_error(
-                        conv_variable,
-                        self.ref_image_features[index]
-                    ) / (variable_shape[0] * variable_shape[1])
-            )
+            self.loss += tf.sqrt(tf.losses.mean_squared_error(conv_variable, self.ref_img_features[index]))
 
 
     def set_reference_images_vgg(self, images_list):
         assert(len(images_list) != 0 and len(images_list) <= self.batch_size)
-        loaded_image = load_images(images_list, self.img_size)
-        image_features = [model.predict_on_batch(loaded_image) for model in self.perceptual_models]
+        loaded_images = load_images(images_list, self.img_size)
+        preprocessed_images = preprocess_input(loaded_images)
+        image_features = [model.predict_on_batch(preprocessed_images) for model in self.perceptual_models]
         for index, image_feature in enumerate(image_features):
             self.sess.run(tf.assign(self.ref_img_features[index], image_feature))
         self.sess.run(tf.assign(self.input_image, loaded_image))
     
-    def set_discriminator_input_image():
-
-
     def set_reference_images_discriminator(self, images_list):
         assert(len(images_list) != 0 and len(images_list) <= self.batch_size)
         assert(self.batch_size == 1)
-        input_expr = [tf.get_default_graph().get_tensor_by_name(name) for name in ['D/images_in:0']]
-        tf.get_default_session().run(expressions, dict(zip(in_expr, mb_in)))
-
-        loaded_image = load_images(images_list, self.img_size)
-        image_features = [model.predict_on_batch(loaded_image) for model in self.perceptual_models]
-        for index, image_feature in enumerate(image_features):
-            self.sess.run(tf.assign(self.ref_img_features[index], image_feature))
-        self.sess.run(tf.assign(self.input_image, loaded_image))
+        loaded_images = load_images(images_list, 1024)
+        input_expr = tf.get_default_graph().get_tensor_by_name('D/images_in:0')
+        output_operations = [ x + ":0" for x in self.discriminator_conv_layer_variable_names[0:self.num_layers_to_use]]
+        print("output_operations = ")
+        print(output_operations)
+        print(input_expr)
+        print(zip(input_expr, loaded_images))
+        #print(dict(zip(input_expr, loaded_images)))
+        image_features = self.sess.run(output_operations, feed_dict = {input_expr: loaded_images})
+        #for x in image_features:
+        #    print(x.shape)
+        #for index, image_feature in enumerate(image_features):
+        #    self.sess.run(tf.assign(self.ref_img_features[index], image_feature))
 
     def optimize(self, vars_to_optimize, iterations=500, learning_rate=1.):
         vars_to_optimize = vars_to_optimize if isinstance(vars_to_optimize, list) else [vars_to_optimize]

@@ -31,7 +31,7 @@ def main():
     parser.add_argument('--image_size', default=256, help='Size of images for perceptual model', type=int)
     parser.add_argument('--lr', default=1., help='Learning rate for perceptual model', type=float)
     parser.add_argument('--iterations', default=1000, help='Number of optimization steps for each batch', type=int)
-    parser.add_argument('--use_discriminator', default=False, help='Whether to use the discriminator of StyleGAN for perceptual loss.', type=int)
+    parser.add_argument('--use_discriminator', default=False, help='Whether to use the discriminator of StyleGAN for perceptual loss.', type=bool)
 
     # Generator params
     parser.add_argument('--randomize_noise', default=False, help='Add noise to dlatents during optimization', type=bool)
@@ -52,8 +52,8 @@ def main():
         generator_network, discriminator_network, Gs_network = pickle.load(f)
 
     generator = Generator(Gs_network, args.batch_size, randomize_noise=args.randomize_noise)
-    perceptual_model = PerceptualModel(args.image_size, layer=9, batch_size=args.batch_size, use_discriminator=args.user_discriminator)
-    if self.use_discriminator:
+    perceptual_model = PerceptualModel(args.image_size, layer=9, batch_size=args.batch_size, use_discriminator=args.use_discriminator)
+    if args.use_discriminator:
         perceptual_model.build_perceptual_model_using_discriminator(generator.generated_image)
     else:
         perceptual_model.build_perceptual_model_vgg(generator.generated_image)
@@ -62,7 +62,10 @@ def main():
     for images_batch in tqdm(split_to_batches(ref_images, args.batch_size), total=len(ref_images)//args.batch_size):
         names = [os.path.splitext(os.path.basename(x))[0] for x in images_batch]
 
-        perceptual_model.set_reference_images(images_batch)
+        if args.use_discriminator:
+            perceptual_model.set_reference_images_discriminator(images_batch)
+        else:
+            perceptual_model.set_reference_images_vgg(images_batch)
         op = perceptual_model.optimize(generator.dlatent_variable, iterations=args.iterations, learning_rate=args.lr)
         pbar = tqdm(op, leave=False, total=args.iterations)
         for loss in pbar:
