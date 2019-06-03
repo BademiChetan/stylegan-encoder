@@ -31,23 +31,23 @@ class PerceptualModel:
         self.use_discriminator = use_discriminator
         self.num_layers_to_use= num_layers_to_use
         self.discriminator_conv_layer_variable_names = [
-                'D/1024x1024/Conv0/LeakyReLU/IdentityN',
-                'D/1024x1024/Conv1_down/LeakyReLU/IdentityN',
-                'D/512x512/Conv0/LeakyReLU/IdentityN',
-                'D/512x512/Conv1_down/LeakyReLU/IdentityN',
-                'D/256x256/Conv0/LeakyReLU/IdentityN',
-                'D/256x256/Conv1_down/LeakyReLU/IdentityN',
-                'D/128x128/Conv0/LeakyReLU/IdentityN',
-                'D/128x128/Conv1_down/LeakyReLU/IdentityN',
-                'D/64x64/Conv0/LeakyReLU/IdentityN',
-                'D/64x64/Conv1_down/LeakyReLU/IdentityN',
-                'D/32x32/Conv0/LeakyReLU/IdentityN',
-                'D/32x32/Conv1_down/LeakyReLU/IdentityN',
-                'D/16x16/Conv0/LeakyReLU/IdentityN',
-                'D/16x16/Conv1_down/LeakyReLU/IdentityN',
-                'D/8x8/Conv0/LeakyReLU/IdentityN',
-                'D/8x8/Conv1_down/LeakyReLU/IdentityN',
-                'D/4x4/Conv/LeakyReLU/IdentityN'
+                '/1024x1024/Conv0/LeakyReLU/IdentityN',
+                '/1024x1024/Conv1_down/LeakyReLU/IdentityN',
+                '/512x512/Conv0/LeakyReLU/IdentityN',
+                '/512x512/Conv1_down/LeakyReLU/IdentityN',
+                '/256x256/Conv0/LeakyReLU/IdentityN',
+                '/256x256/Conv1_down/LeakyReLU/IdentityN',
+                '/128x128/Conv0/LeakyReLU/IdentityN',
+                '/128x128/Conv1_down/LeakyReLU/IdentityN',
+                '/64x64/Conv0/LeakyReLU/IdentityN',
+                '/64x64/Conv1_down/LeakyReLU/IdentityN',
+                '/32x32/Conv0/LeakyReLU/IdentityN',
+                '/32x32/Conv1_down/LeakyReLU/IdentityN',
+                '/16x16/Conv0/LeakyReLU/IdentityN',
+                '/16x16/Conv1_down/LeakyReLU/IdentityN',
+                '/8x8/Conv0/LeakyReLU/IdentityN',
+                '/8x8/Conv1_down/LeakyReLU/IdentityN',
+                '/4x4/Conv/LeakyReLU/IdentityN'
         ] 
     
 
@@ -86,12 +86,12 @@ class PerceptualModel:
 
 
 
-    def build_perceptual_model_using_discriminator(self, generated_image_tensor):
+    def build_perceptual_model_using_discriminator(self):
         self.loss = 0
         self.ref_img_features = []
         for index, conv_variable_name in enumerate(self.discriminator_conv_layer_variable_names[0:self.num_layers_to_use]):
             # TODO: Check the correct method for getting variable.
-            conv_variable = tf.get_default_graph().get_tensor_by_name(conv_variable_name + ":0")
+            conv_variable = tf.get_default_graph().get_tensor_by_name('D2' + conv_variable_name + ":0")
             variable_shape = conv_variable.shape
             print("variable shape = ")
             print(variable_shape)
@@ -117,19 +117,19 @@ class PerceptualModel:
         assert(self.batch_size == 1)
         loaded_images = load_images(images_list, 1024)
         input_expr = tf.get_default_graph().get_tensor_by_name('D/images_in:0')
-        output_operations = [ x + ":0" for x in self.discriminator_conv_layer_variable_names[0:self.num_layers_to_use]]
+        output_operations = [ 'D' + x + ":0" for x in self.discriminator_conv_layer_variable_names[0:self.num_layers_to_use]]
         print("output_operations = ")
         print(output_operations)
         print(input_expr)
         print(zip(input_expr, loaded_images))
         #print(dict(zip(input_expr, loaded_images)))
         image_features = self.sess.run(output_operations, feed_dict = {input_expr: loaded_images})
-        #for x in image_features:
-        #    print(x.shape)
-        #for index, image_feature in enumerate(image_features):
-        #    self.sess.run(tf.assign(self.ref_img_features[index], image_feature))
+        for x in image_features:
+            print(x.shape)
+        for index, image_feature in enumerate(image_features):
+            self.sess.run(tf.assign(self.ref_img_features[index], image_feature))
 
-    def optimize(self, vars_to_optimize, iterations=500, learning_rate=1.):
+    def optimize(self, vars_to_optimize, iterations=500, learning_rate=1., generated_image=None):
         vars_to_optimize = vars_to_optimize if isinstance(vars_to_optimize, list) else [vars_to_optimize]
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
         min_op = optimizer.minimize(self.loss, var_list=[vars_to_optimize])
