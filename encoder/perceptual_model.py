@@ -91,7 +91,7 @@ class PerceptualModel:
         self.ref_img_features = []
         for index, conv_variable_name in enumerate(self.discriminator_conv_layer_variable_names[0:self.num_layers_to_use]):
             # TODO: Check the correct method for getting variable.
-            conv_variable = tf.get_default_graph().get_tensor_by_name('D2' + conv_variable_name + ":0")
+            conv_variable = tf.get_default_graph().get_tensor_by_name('D' + conv_variable_name + ":0")
             variable_shape = conv_variable.shape
             print("variable shape = ")
             print(variable_shape)
@@ -130,6 +130,9 @@ class PerceptualModel:
             self.sess.run(tf.assign(self.ref_img_features[index], image_feature))
 
     def optimize(self, vars_to_optimize, iterations=500, learning_rate=1., generated_image=None):
+        graph_def = tf.get_default_graph().as_graph_def()
+        tf.reset_default_graph()
+        tf.import_graph_def(graph_def, input_map={'D/images_in:0': generated_image})
         vars_to_optimize = vars_to_optimize if isinstance(vars_to_optimize, list) else [vars_to_optimize]
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
         min_op = optimizer.minimize(self.loss, var_list=[vars_to_optimize])

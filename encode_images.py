@@ -75,7 +75,7 @@ def main():
                 generator.dlatent_variable, 
                 iterations=args.iterations,
                 learning_rate=args.lr,
-                generated_image=generator.generated_image)
+                generated_image=generator.generator_output)
         pbar = tqdm(op, leave=False, total=args.iterations)
         for loss in pbar:
             pbar.set_description(' '.join(names)+' Loss: %.2f' % loss)
