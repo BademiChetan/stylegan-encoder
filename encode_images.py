@@ -9,6 +9,7 @@ import dnnlib.tflib as tflib
 import config
 from encoder.generator_model import Generator
 from encoder.perceptual_model import PerceptualModel
+import tensorflow as tf
 
 URL_FFHQ = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ'  # karras2019stylegan-ffhq-1024x1024.pkl
 
@@ -53,8 +54,11 @@ def main():
 
     generator = Generator(Gs_network, args.batch_size, randomize_noise=args.randomize_noise)
     perceptual_model = PerceptualModel(args.image_size, layer=9, batch_size=args.batch_size, use_discriminator=args.use_discriminator)
+    new_discriminator = tflib.Network(
+            'D2', num_channels=3, resolution=1024, label_size=0,
+            structure= 'fixed', func_name='training.networks_stylegan.D_basic', input_template=generator.generated_image)
     if args.use_discriminator:
-        perceptual_model.build_perceptual_model_using_discriminator(generator.generated_image)
+        perceptual_model.build_perceptual_model_using_discriminator()
     else:
         perceptual_model.build_perceptual_model_vgg(generator.generated_image)
 
@@ -66,7 +70,12 @@ def main():
             perceptual_model.set_reference_images_discriminator(images_batch)
         else:
             perceptual_model.set_reference_images_vgg(images_batch)
-        op = perceptual_model.optimize(generator.dlatent_variable, iterations=args.iterations, learning_rate=args.lr)
+        input_image_tensor = tf.get_default_graph().get_tensor_by_name('D/images_in:0')
+        op = perceptual_model.optimize(
+                generator.dlatent_variable, 
+                iterations=args.iterations,
+                learning_rate=args.lr,
+                generated_image=generator.generated_image)
         pbar = tqdm(op, leave=False, total=args.iterations)
         for loss in pbar:
             pbar.set_description(' '.join(names)+' Loss: %.2f' % loss)

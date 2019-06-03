@@ -76,7 +76,7 @@ class Network:
         assert isinstance(name, str) or name is None
         assert func_name is not None
         assert isinstance(func_name, str) or util.is_top_level_function(func_name)
-        assert util.is_pickleable(static_kwargs)
+        #assert util.is_pickleable(static_kwargs)
 
         self._init_fields()
         self.name = name
