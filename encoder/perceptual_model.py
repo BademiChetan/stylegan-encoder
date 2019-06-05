@@ -10,7 +10,7 @@ def load_images(images_list, img_size):
     loaded_images = list()
     for img_path in images_list:
         img = np.array(image.load_img(img_path, target_size=(img_size, img_size)))
-        img = img.transpose(2,0,1)
+        # img = img.transpose(2,0,1)
         img = np.expand_dims(img, 0)
         loaded_images.append(img)
     return np.vstack(loaded_images)
@@ -23,8 +23,12 @@ class PerceptualModel:
         self.img_size = img_size
         self.layer = layer
         self.batch_size = batch_size
+        # L2 loss only
+        # self.perceptual_loss_layers = {}
+        # Loss function proposed by Image2StyleGAN
         self.perceptual_loss_layers = {'conv1_1': 1, 'conv1_2': 2, 'conv3_2': 8, 'conv4_2': 12}
-        #self.perceptual_loss_layers = {'conv4_2': 9}
+        # Loss function by stylegan-encoder
+        # self.perceptual_loss_layers = {'conv4_2': 9}
         self.perceptual_model = None
         self.ref_img_features = None
         self.loss = None
@@ -70,17 +74,17 @@ class PerceptualModel:
                            ) for index, generated_image_feature in enumerate(generated_img_features)]
         
         # Perceptual loss from Image2StyleGAN
-        #self.loss = tf.reduce_sum([
-        #            tf.math.sqrt(
-        #                tf.losses.mean_squared_error(
-        #                self.ref_img_features[i], 
-        #                generated_img_features[i])
-        #            )
-        #    for i in range(len(generated_img_features))])
-        ## L2 loss between generated image and input image
-        #self.loss += tf.sqrt(tf.losses.mean_squared_error(generated_image, self.input_image))
+        self.loss = tf.reduce_sum([
+                    tf.math.sqrt(
+                        tf.losses.mean_squared_error(
+                        self.ref_img_features[i], 
+                        generated_img_features[i])
+                    )
+            for i in range(len(generated_img_features))])
+        # L2 loss between generated image and input image
+        # self.loss += tf.sqrt(tf.losses.mean_squared_error(generated_image, self.input_image))
         # Use SSIM as the loss function
-        self.loss =  - tf.image.ssim(generated_image, self.input_image, 256)
+        # self.loss =  - tf.image.ssim(generated_image, self.input_image, 256)
         # Use MS-SSIM as the loss function
         # self.loss = tf.image.ssim_multiscale(generated_image, self.input_image, 256)
 
@@ -110,7 +114,8 @@ class PerceptualModel:
         image_features = [model.predict_on_batch(preprocessed_images) for model in self.perceptual_models]
         for index, image_feature in enumerate(image_features):
             self.sess.run(tf.assign(self.ref_img_features[index], image_feature))
-        self.sess.run(tf.assign(self.input_image, loaded_image))
+        self.sess.run(tf.assign(self.input_image, preprocessed_images))
+        return loaded_images
     
     def set_reference_images_discriminator(self, images_list):
         assert(len(images_list) != 0 and len(images_list) <= self.batch_size)
@@ -130,9 +135,6 @@ class PerceptualModel:
             self.sess.run(tf.assign(self.ref_img_features[index], image_feature))
 
     def optimize(self, vars_to_optimize, iterations=500, learning_rate=1., generated_image=None):
-        graph_def = tf.get_default_graph().as_graph_def()
-        tf.reset_default_graph()
-        tf.import_graph_def(graph_def, input_map={'D/images_in:0': generated_image})
         vars_to_optimize = vars_to_optimize if isinstance(vars_to_optimize, list) else [vars_to_optimize]
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
         min_op = optimizer.minimize(self.loss, var_list=[vars_to_optimize])

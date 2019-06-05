@@ -66,10 +66,11 @@ def main():
     for images_batch in tqdm(split_to_batches(ref_images, args.batch_size), total=len(ref_images)//args.batch_size):
         names = [os.path.splitext(os.path.basename(x))[0] for x in images_batch]
 
+        input_images = None
         if args.use_discriminator:
             perceptual_model.set_reference_images_discriminator(images_batch)
         else:
-            perceptual_model.set_reference_images_vgg(images_batch)
+            input_images = perceptual_model.set_reference_images_vgg(images_batch)
         input_image_tensor = tf.get_default_graph().get_tensor_by_name('D/images_in:0')
         op = perceptual_model.optimize(
                 generator.dlatent_variable, 
@@ -89,6 +90,10 @@ def main():
             img.save(os.path.join(args.generated_images_dir, f'{img_name}.png'), 'PNG')
             np.save(os.path.join(args.dlatent_dir, f'{img_name}.npy'), dlatent)
 
+        print(input_images.shape, generated_images.shape)
+        downscaled_generated_image =  PIL.Image.fromarray(generated_images[0], 'RGB').resize((256, 256))
+        ssim_op = tf.image.ssim(tf.convert_to_tensor(input_images[0]), tf.convert_to_tensor(downscaled_generated_image), 256)
+        print(perceptual_model.sess.run([ssim_op]))
         generator.reset_dlatents()
 
 
